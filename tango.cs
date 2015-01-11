@@ -10,7 +10,7 @@
 //	verb
 //	1.	dance the tango.
 
-$Tango::Debug = true;
+$Tango::Debug = false;
 
 //If an add-on already has an equal or newer version of Tango, let's stop running the script.
 //Assuming we're not in debug mode, of course ...
