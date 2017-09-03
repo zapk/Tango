@@ -1,26 +1,17 @@
 //	tan·go
 //	/ˈtaNGɡō/
-//
-//	noun
-//	1.	a ballroom dance originating in Buenos Aires, characterized by marked rhythms
-//		and postures and abrupt pauses.
-//
-//	2.	a code word representing the letter T, used in voice communication by radio.
-//
-//	verb
-//	1.	dance the tango.
 
 $Tango::Debug = false;
 
 //If an add-on already has an equal or newer version of Tango, let's stop running the script.
 //Assuming we're not in debug mode, of course ...
-if( !$Tango::Debug && $Tango::Version > 0 && $Tango::Version >= 030 )
+if( !$Tango::Debug && $Tango::Version > 0 && $Tango::Version >= 040 )
 {
 	return;
 }
 
 //Set the version number.
-$Tango::Version = 030; // 0.3.0
+$Tango::Version = 040; // 0.4.0
 
 //A function to echo something in a readable format for debugging.
 //@param	string string	The message to output.
@@ -103,7 +94,9 @@ function GuiControl::tangoMoveTo(%this, %xy, %ms, %easeModeX, %easeModeY)
 
 	tngE("Starting.");
 	if(%easeModeY $= "") %easeModeY = %easeModeX;
-	%this.tangoMoveTick(%easeMode[x], %easeMode[y], %mypos, %dist[x], %dist[y], %ms, 0);
+	%this.tangoMoveStartTime = getSimTime();
+	%this.tangoMoveEndTime = getSimTime() + %ms;
+	%this.tangoMoveTick(%easeMode[x], %easeMode[y], %mypos, %dist[x], %dist[y]);
 }
 
 //Called every 33ms while the GuiControl moves to its destination.
@@ -114,12 +107,14 @@ function GuiControl::tangoMoveTo(%this, %xy, %ms, %easeModeX, %easeModeY)
 //@param	int dist[x]
 //@param	int dist[y]
 //@param	int ms
-//@param	int currTime
 //@see	GuiControl::tangoMoveTo
 //@private
-function GuiControl::tangoMoveTick(%this, %modex, %modey, %startpos, %distx, %disty, %ms, %currTime)
+function GuiControl::tangoMoveTick(%this, %modex, %modey, %startpos, %distx, %disty)
 {
 	cancel(%this.tangoMoveTick);
+
+	%currTime = getSimTime() - %this.tangoMoveStartTime;
+	%ms = %this.tangoMoveEndTime - %this.tangoMoveStartTime;
 
 	if(%currTime > %ms)
 	{
@@ -127,58 +122,26 @@ function GuiControl::tangoMoveTick(%this, %modex, %modey, %startpos, %distx, %di
 		%y = getWord(%startpos, 1) + %dist[y];
 		%w = getWord(%this.extent, 0);
 		%h = getWord(%this.extent, 1);
-	
+
 		%this.resize(%x, %y, %w, %h);
 
 		$tngEcf = "tangoMoveTick";
 		tngE("Done!" SPC %this.position SPC %distx SPC %disty);
 		return;
 	}
-	
-	switch$(%mode[x])
-	{
-		case "quad":
-			%pos[x] = tangoEaseQuad(%currTime, 0, %dist[x], %ms);
-		case "sine":
-			%pos[x] = tangoEaseSine(%currTime, 0, %dist[x], %ms);
-		case "expo":
-			%pos[x] = tangoEaseExpo(%currTime, 0, %dist[x], %ms);
-		case "circ":
-			%pos[x] = tangoEaseCirc(%currTime, 0, %dist[x], %ms);
-		case "cube":
-			%pos[x] = tangoEaseCube(%currTime, 0, %dist[x], %ms);
-		case "quart":
-			%pos[x] = tangoEaseQuart(%currTime, 0, %dist[x], %ms);
-		case "elastic":
-			if( %dist[x] < 0 )
-				%pos[x] = -tangoEaseElastic(%currTime, 0, mAbs(%dist[x]), %ms);
-			else
-				%pos[x] = tangoEaseElastic(%currTime, 0, %dist[x], %ms);
-		default:
-			%pos[x] = tangoEaseLinear(%currTime, 0, %dist[x], %ms);
-	}
-	switch$(%mode[y])
-	{
-		case "quad":
-			%pos[y] = tangoEaseQuad(%currTime, 0, %dist[y], %ms);
-		case "sine":
-			%pos[y] = tangoEaseSine(%currTime, 0, %dist[y], %ms);
-		case "expo":
-			%pos[y] = tangoEaseExpo(%currTime, 0, %dist[y], %ms);
-		case "circ":
-			%pos[y] = tangoEaseCirc(%currTime, 0, %dist[y], %ms);
-		case "cube":
-			%pos[y] = tangoEaseCube(%currTime, 0, %dist[y], %ms);
-		case "quart":
-			%pos[y] = tangoEaseQuart(%currTime, 0, %dist[y], %ms);
-		case "elastic":
-			if( %dist[y] < 0 )
-				%pos[y] = -tangoEaseElastic(%currTime, 0, mAbs(%dist[y]), %ms);
-			else
-				%pos[y] = tangoEaseElastic(%currTime, 0, %dist[y], %ms);
-		default:
-			%pos[y] = tangoEaseLinear(%currTime, 0, %dist[y], %ms);
-	}
+
+	%func[x] = %func[y] = "tangoEaseLinear";
+
+	if(isFunction(%ifn = "tangoEase" @ %mode[x]))
+		%func[x] = %ifn;
+	if(isFunction(%ifn = "tangoEase" @ %mode[y]))
+		%func[y] = %ifn;
+
+	%pos[x] = call(%func[x], %currTime, 0, %dist[x], %ms);
+	%pos[y] = call(%func[y], %currTime, 0, %dist[y], %ms);
+
+	tngE("pos[x] = " @ %pos[x]);
+	tngE("pos[y] = " @ %pos[y]);
 
 	%x = getWord(%startpos, 0) + %pos[x];
 	%y = getWord(%startpos, 1) + %pos[y];
@@ -187,7 +150,7 @@ function GuiControl::tangoMoveTick(%this, %modex, %modey, %startpos, %distx, %di
 
 	%this.resize(%x, %y, %w, %h);
 
-	%this.tangoMoveTick = %this.schedule( 33, tangoMoveTick, %mode[x], %mode[y], %startpos, %distx, %disty, %ms, %currTime += 33 );
+	%this.tangoMoveTick = %this.schedule( 1, tangoMoveTick, %mode[x], %mode[y], %startpos, %distx, %disty );
 }
 
 //A function to smoothly scale a GuiControl to a specified extent, with optional easing.
@@ -231,7 +194,9 @@ function GuiControl::tangoScaleTo(%this, %xy, %ms, %easeModeX, %easeModeY)
 
 	tngE("Starting.");
 	if(%easeModeY $= "") %easeModeY = %easeModeX;
-	%this.tangoScaleTick(%easeMode[x], %easeMode[y], %myscale, %dist[x], %dist[y], %ms, 0);
+	%this.tangoScaleStartTime = getSimTime();
+	%this.tangoScaleEndTime = getSimTime() + %ms;
+	%this.tangoScaleTick(%easeMode[x], %easeMode[y], %myscale, %dist[x], %dist[y]);
 }
 
 //Called every 33ms while the GuiControl scales to its destination.
@@ -245,9 +210,12 @@ function GuiControl::tangoScaleTo(%this, %xy, %ms, %easeModeX, %easeModeY)
 //@param	int currTime
 //@see	GuiControl::tangoMoveTo
 //@private
-function GuiControl::tangoScaleTick(%this, %modex, %modey, %startscale, %distx, %disty, %ms, %currTime)
+function GuiControl::tangoScaleTick(%this, %modex, %modey, %startscale, %distx, %disty)
 {
 	cancel(%this.tangoScaleTick);
+
+	%currTime = getSimTime() - %this.tangoScaleStartTime;
+	%ms = %this.tangoScaleEndTime - %this.tangoScaleStartTime;
 
 	if(%currTime > %ms)
 	{
@@ -255,58 +223,23 @@ function GuiControl::tangoScaleTick(%this, %modex, %modey, %startscale, %distx, 
 		%y = getWord(%this.position, 1);
 		%w = getWord(%startscale, 0) + %dist[x];
 		%h = getWord(%startscale, 1) + %dist[y];
-	
+
 		%this.resize(%x, %y, %w, %h);
 
 		$tngEcf = "tangoScaleTick";
 		tngE("Done!" SPC %this.position SPC %distx SPC %disty);
 		return;
 	}
-	
-	switch$(%mode[x])
-	{
-		case "quad":
-			%pos[x] = tangoEaseQuad(%currTime, 0, %dist[x], %ms);
-		case "sine":
-			%pos[x] = tangoEaseSine(%currTime, 0, %dist[x], %ms);
-		case "expo":
-			%pos[x] = tangoEaseExpo(%currTime, 0, %dist[x], %ms);
-		case "circ":
-			%pos[x] = tangoEaseCirc(%currTime, 0, %dist[x], %ms);
-		case "cube":
-			%pos[x] = tangoEaseCube(%currTime, 0, %dist[x], %ms);
-		case "quart":
-			%pos[x] = tangoEaseQuart(%currTime, 0, %dist[x], %ms);
-		case "elastic":
-			if( %dist[x] < 0 )
-				%pos[x] = -tangoEaseElastic(%currTime, 0, mAbs(%dist[x]), %ms);
-			else
-				%pos[x] = tangoEaseElastic(%currTime, 0, %dist[x], %ms);
-		default:
-			%pos[x] = tangoEaseLinear(%currTime, 0, %dist[x], %ms);
-	}
-	switch$(%mode[y])
-	{
-		case "quad":
-			%pos[y] = tangoEaseQuad(%currTime, 0, %dist[y], %ms);
-		case "sine":
-			%pos[y] = tangoEaseSine(%currTime, 0, %dist[y], %ms);
-		case "expo":
-			%pos[y] = tangoEaseExpo(%currTime, 0, %dist[y], %ms);
-		case "circ":
-			%pos[y] = tangoEaseCirc(%currTime, 0, %dist[y], %ms);
-		case "cube":
-			%pos[y] = tangoEaseCube(%currTime, 0, %dist[y], %ms);
-		case "quart":
-			%pos[y] = tangoEaseQuart(%currTime, 0, %dist[y], %ms);
-		case "elastic":
-			if( %dist[y] < 0 )
-				%pos[y] = -tangoEaseElastic(%currTime, 0, mAbs(%dist[y]), %ms);
-			else
-				%pos[y] = tangoEaseElastic(%currTime, 0, %dist[y], %ms);
-		default:
-			%pos[y] = tangoEaseLinear(%currTime, 0, %dist[y], %ms);
-	}
+
+	%func[x] = %func[y] = "tangoEaseLinear";
+
+	if(isFunction(%ifn = "tangoEase" @ %mode[x]))
+		%func[x] = %ifn;
+	if(isFunction(%ifn = "tangoEase" @ %mode[y]))
+		%func[y] = %ifn;
+
+	%pos[x] = call(%func[x], %currTime, 0, %dist[x], %ms);
+	%pos[y] = call(%func[y], %currTime, 0, %dist[y], %ms);
 
 	%x = getWord(%this.position, 0);
 	%y = getWord(%this.position, 1);
@@ -315,7 +248,7 @@ function GuiControl::tangoScaleTick(%this, %modex, %modey, %startscale, %distx, 
 
 	%this.resize(%x, %y, %w, %h);
 
-	%this.tangoScaleTick = %this.schedule( 33, tangoScaleTick, %mode[x], %mode[y], %startscale, %distx, %disty, %ms, %currTime += 33 );
+	%this.tangoScaleTick = %this.schedule( 1, tangoScaleTick, %mode[x], %mode[y], %startscale, %distx, %disty );
 }
 
 //Determines an offset position for a linear movement along an axis.
@@ -425,6 +358,13 @@ function tangoEaseQuart(%t, %b, %c, %d)
 //@see	tangoEaseLinear
 function tangoEaseElastic(%t, %b, %c, %d)
 {
+	%flip = false;
+	if (%c < 0)
+	{
+		%c = mAbs( %c );
+		%flip = true;
+	}
+
 	%s = 1.70158; %p = 0; %a = %c;
 
 	if( %t == 0 ) return %b;
@@ -441,5 +381,7 @@ function tangoEaseElastic(%t, %b, %c, %d)
 		%s = %p / ( 2 * %pi) * mAsin( %c / %a );
 	}
 
-	return %a * mPow( 2, -10 * %t ) * mSin( ( %t * %d - %s ) * ( 2 * %pi ) / %p ) + %c + %b;
+	%r = %a * mPow( 2, -10 * %t ) * mSin( ( %t * %d - %s ) * ( 2 * %pi ) / %p ) + %c + %b;
+
+	return %flip ? -%r : %r;
 }
